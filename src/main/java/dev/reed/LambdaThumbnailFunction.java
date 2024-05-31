@@ -5,10 +5,8 @@ import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.events.S3Event;
 import com.amazonaws.services.lambda.runtime.events.models.s3.S3EventNotification;
 import com.amazonaws.services.lambda.runtime.logging.LogLevel;
-import dev.reed.dto.ThumbnailUploadResponse;
 import net.coobird.thumbnailator.Thumbnails;
 import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.http.SdkHttpResponse;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -38,8 +36,7 @@ public class LambdaThumbnailFunction {
                 .build();
     }
 
-    public ThumbnailUploadResponse handleRequest(final S3Event s3Event, final Context context) {
-        ThumbnailUploadResponse.ThumbnailUploadResponseBuilder builder = ThumbnailUploadResponse.builder();
+    public void handleRequest(final S3Event s3Event, final Context context) {
         String targetBucketName = System.getenv(TARGET_BUCKET_PROPERTY);
         LambdaLogger logger = context.getLogger();
         s3Event.getRecords().forEach(record -> {
@@ -58,7 +55,7 @@ public class LambdaThumbnailFunction {
 
                 String destination = targetBucketName + File.separatorChar + DESTINATION_DIR;
                 logger.log("Putting a thumbnail: '%s' to the target bucket: '%s'".formatted(thumbnail.getName(), destination));
-                PutObjectResponse putObjectResponse = s3Client.putObject(
+                s3Client.putObject(
                         PutObjectRequest.builder()
                                 .bucket(targetBucketName)
                                 .key(DESTINATION_DIR + sourceFileKey)
@@ -66,17 +63,10 @@ public class LambdaThumbnailFunction {
                         RequestBody.fromFile(thumbnail)
                 );
                 logger.log("Thumbnail '%s' was sent to the target bucket: '%s'".formatted(thumbnail.getName(), destination));
-
-                SdkHttpResponse sdkHttpResponse = putObjectResponse.sdkHttpResponse();
-                builder.fileName(sourceFileKey)
-                        .status(sdkHttpResponse.statusCode())
-                        .message(sdkHttpResponse.statusText().orElse(ThumbnailUploadResponse.DEFAULT_MESSAGE))
-                        .targetBucket(targetBucketName);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         });
-        return builder.build();
     }
 
     private File downloadSourceFile(String sourceFileKey, String sourceBucketName) throws IOException {
